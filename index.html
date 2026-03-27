@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DB Passwort Rotation</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:      #0b0c10;
+      --surface: #13141a;
+      --border:  #1f2130;
+      --accent:  #4af0a0;
+      --text:    #e8eaf0;
+      --muted:   #4a4e6a;
+      --error:   #ff5f6d;
+      --font:    'IBM Plex Mono', monospace;
+    }
+    body {
+      background: var(--bg); color: var(--text); font-family: var(--font);
+      min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    body::before {
+      content: ''; position: fixed; inset: 0;
+      background-image: linear-gradient(var(--border) 1px, transparent 1px),
+                        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 40px 40px; opacity: 0.25; pointer-events: none;
+    }
+    .card {
+      width: 100%; max-width: 440px; background: var(--surface);
+      border: 1px solid var(--border); border-radius: 16px;
+      padding: 36px 32px; position: relative; animation: slideUp 0.4s ease;
+    }
+    .card::before {
+      content: ''; position: absolute; top: -1px; left: 50%; transform: translateX(-50%);
+      width: 60%; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    }
+    @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+
+    .header { text-align: center; margin-bottom: 28px; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 7px;
+      background: #0d2e1e; border: 1px solid #1a5c38; border-radius: 20px;
+      padding: 5px 14px; font-size: 11px; color: var(--accent);
+      letter-spacing: 2px; margin-bottom: 14px;
+    }
+    h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+    .subtitle { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+    .info-box {
+      background: #0d1420; border: 1px solid #1a2a40; border-radius: 10px;
+      padding: 12px 14px; margin-bottom: 24px; font-size: 11px; color: #5a7fa8; line-height: 2;
+    }
+    .info-box .row { display: flex; justify-content: space-between; }
+    .info-box .val { color: #7bafd4; font-weight: 600; }
+
+    .field { margin-bottom: 16px; }
+    label { display: block; font-size: 10px; letter-spacing: 2px; color: var(--muted); margin-bottom: 7px; text-transform: uppercase; }
+    .input-wrap { position: relative; }
+    input {
+      width: 100%; background: #0b0c10; border: 1px solid var(--border);
+      border-radius: 8px; padding: 11px 14px; color: var(--text);
+      font-family: var(--font); font-size: 14px; outline: none; transition: border-color 0.2s;
+    }
+    input:focus { border-color: var(--accent); }
+    .toggle-pw {
+      position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px;
+    }
+    button.submit {
+      width: 100%; margin-top: 8px; padding: 13px; background: var(--accent); color: #000;
+      border: none; border-radius: 10px; font-family: var(--font); font-size: 14px;
+      font-weight: 700; letter-spacing: 1px; cursor: pointer; transition: opacity 0.2s, transform 0.1s;
+    }
+    button.submit:hover  { opacity: 0.85; }
+    button.submit:active { transform: scale(0.98); }
+    button.submit:disabled { background: #1f2130; color: var(--muted); cursor: not-allowed; }
+
+    .status {
+      margin-top: 20px; border-radius: 10px; padding: 14px 16px;
+      font-size: 13px; display: none; align-items: flex-start; gap: 10px;
+      animation: fadeIn 0.3s ease;
+    }
+    .status.ok      { background: #0a1f14; border: 1px solid #1a4d30; color: var(--accent); display: flex; }
+    .status.err     { background: #1f0a0c; border: 1px solid #4d1a1e; color: var(--error);  display: flex; }
+    .status.loading { background: #0d1420; border: 1px solid #1a2a40; color: #5a7fa8;       display: flex; }
+
+    .log {
+      margin-top: 16px; background: #080910; border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px 14px; font-size: 11px;
+      color: var(--muted); line-height: 2; display: none;
+    }
+    .log.visible { display: block; }
+    .log .ok  { color: var(--accent); }
+    .log .err { color: var(--error); }
+    .log .inf { color: #5a7fa8; }
+
+    @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+  </style>
+</head>
+<body>
+<div class="card">
+
+  <div class="header">
+    <div class="badge"><span>🔐</span> DB ROTATION</div>
+    <h1>Passwort ändern</h1>
+    <p class="subtitle">Einloggen → Passwort wird automatisch geändert</p>
+  </div>
+
+  <div class="info-box">
+    <div class="row"><span>HOST</span>      <span class="val">192.168.1.100</span></div>
+    <div class="row"><span>PORT</span>      <span class="val">3306</span></div>
+    <div class="row"><span>DATENBANK</span> <span class="val">meine_datenbank</span></div>
+    <div class="row"><span>NEUES PW</span>  <span class="val">TestPasswort</span></div>
+  </div>
+
+  <div class="field">
+    <label>Benutzername</label>
+    <input type="text" id="user" placeholder="z.B. db_user" autocomplete="off"/>
+  </div>
+
+  <div class="field">
+    <label>Aktuelles Passwort</label>
+    <div class="input-wrap">
+      <input type="password" id="pass" placeholder="••••••••"/>
+      <button class="toggle-pw" onclick="togglePw()">👁</button>
+    </div>
+  </div>
+
+  <button class="submit" id="btn" onclick="startRotation()">🔄 ROTATION STARTEN</button>
+
+  <div class="status" id="status">
+    <div id="status-icon"></div>
+    <div id="status-text"></div>
+  </div>
+
+  <div class="log" id="log"></div>
+
+</div>
+
+<script>
+  // ── Backend-URL ─────────────────────────────────────────────────
+  // Lokal:  http://localhost:5000/rotate
+  // Render: https://DEIN-APP-NAME.onrender.com/rotate  ← anpassen!
+  const BACKEND = "/rotate";
+  // ────────────────────────────────────────────────────────────────
+
+  function togglePw() {
+    const inp = document.getElementById("pass");
+    inp.type = inp.type === "password" ? "text" : "password";
+  }
+
+  function addLog(text, type = "inf") {
+    const log = document.getElementById("log");
+    log.classList.add("visible");
+    const time = new Date().toLocaleTimeString();
+    log.innerHTML += `<div class="${type}">[${time}] ${text}</div>`;
+  }
+
+  function setStatus(type, icon, text) {
+    const el = document.getElementById("status");
+    el.className = `status ${type}`;
+    document.getElementById("status-icon").textContent = icon;
+    document.getElementById("status-text").textContent = text;
+  }
+
+  const warte = ms => new Promise(r => setTimeout(r, ms));
+
+  async function startRotation() {
+    const user = document.getElementById("user").value.trim();
+    const pass = document.getElementById("pass").value;
+
+    if (!user || !pass) {
+      setStatus("err", "⚠️", "Bitte User und Passwort eingeben!");
+      return;
+    }
+
+    const btn = document.getElementById("btn");
+    btn.disabled = true;
+    btn.textContent = "Läuft...";
+    document.getElementById("log").innerHTML = "";
+    document.getElementById("log").classList.remove("visible");
+
+    setStatus("loading", "⏳", "Verbinde mit Datenbank...");
+    addLog(`Sende Anfrage an Backend ...`);
+    await warte(400);
+
+    try {
+      // ── Fetch an server.py ──────────────────────────────────────
+      const antwort = await fetch(BACKEND, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user, password: pass })
+      });
+
+      const daten = await antwort.json();
+      // ────────────────────────────────────────────────────────────
+
+      if (daten.erfolg) {
+        addLog(`User '${user}' authentifiziert ✓`, "ok");
+        addLog("ALTER USER ausgeführt ✓", "ok");
+        addLog("FLUSH PRIVILEGES ✓", "ok");
+        addLog("Verbindung geschlossen.", "inf");
+        setStatus("ok", "✅", daten.nachricht);
+      } else {
+        addLog(`Fehler: ${daten.nachricht}`, "err");
+        setStatus("err", "❌", daten.nachricht);
+      }
+
+    } catch (e) {
+      addLog("Backend nicht erreichbar!", "err");
+      setStatus("err", "❌", "Verbindung zum Backend fehlgeschlagen.");
+    }
+
+    btn.disabled = false;
+    btn.textContent = "🔄 ROTATION STARTEN";
+  }
+
+  document.addEventListener("keydown", e => { if (e.key === "Enter") startRotation(); });
+</script>
+</body>
+</html>
